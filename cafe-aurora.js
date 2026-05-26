@@ -3,32 +3,28 @@
    Hospedado externamente (jsDelivr / GitHub)
    Carregado no Webflow via DOM tag <script src="...">
 
-   Funcionalidades:
-   1. Lightbox: clique em imagens do #sobre para ampliá-las
-   2. Hover sutil nas imagens (brightness + cursor)
-   3. Fade-in das sections ao rolar (respeita prefers-reduced-motion)
+   Funcionalidades (todas restritas à seção #sobre):
+   1. Hover sutil nas imagens (brightness + sombra)
+   2. Lightbox: clique nas imagens para ampliar em modal
    ========================================================= */
 
 (() => {
   'use strict';
 
-  const SECTION_IDS = ['sobre', 'cardapio', 'espaco', 'avaliacoes', 'localizacao', 'reserva'];
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
   /* =========================================================
-     CSS injetado (com !important para vencer o Webflow)
+     CSS customizado — !important para vencer o Webflow
      ========================================================= */
   const style = document.createElement('style');
   style.id = 'aurora-customizations-css';
   style.textContent = `
     /* Hover sutil nas imagens do #sobre */
-    #sobre .image_cover {
+    #sobre img {
       cursor: zoom-in !important;
       filter: brightness(0.95);
       transition: filter .3s ease, box-shadow .3s ease !important;
     }
-    #sobre .image_cover:hover,
-    #sobre .image_cover:focus-visible {
+    #sobre img:hover,
+    #sobre img:focus-visible {
       filter: brightness(1.05) !important;
       box-shadow: 0 12px 40px rgba(43, 26, 16, 0.35) !important;
       outline: none;
@@ -100,41 +96,22 @@
     body.aurora-lightbox-active {
       overflow: hidden;
     }
-
-    /* Fade-in on scroll (respeita reduce motion) */
-    .aurora-fade {
-      opacity: 0 !important;
-      transform: translateY(40px) !important;
-      transition: opacity .9s cubic-bezier(.16, 1, .3, 1),
-                  transform .9s cubic-bezier(.16, 1, .3, 1) !important;
-      will-change: opacity, transform;
-    }
-    .aurora-fade.aurora-visible {
-      opacity: 1 !important;
-      transform: translateY(0) !important;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .aurora-fade {
-        opacity: 1 !important;
-        transform: none !important;
-        transition: none !important;
-      }
-    }
   `;
   document.head.appendChild(style);
 
   /* =========================================================
-     LIGHTBOX — funciona mesmo com prefers-reduced-motion
-     (acionado por clique do usuário = user-initiated)
+     Lightbox — só nas imagens do #sobre
+     Acionado por clique do usuário (user-initiated),
+     funciona mesmo com prefers-reduced-motion ativado.
      ========================================================= */
-  const setupLightbox = () => {
+  const init = () => {
     const sobre = document.getElementById('sobre');
     if (!sobre) {
-      console.warn('[Aurora] #sobre não encontrado, pulando lightbox.');
+      console.warn('[Aurora] #sobre não encontrado.');
       return;
     }
 
-    const images = sobre.querySelectorAll('img.image_cover, img');
+    const images = sobre.querySelectorAll('img');
     if (!images.length) {
       console.warn('[Aurora] Nenhuma imagem encontrada no #sobre.');
       return;
@@ -142,7 +119,6 @@
 
     console.log('[Aurora] Lightbox configurado em', images.length, 'imagens do #sobre');
 
-    /* Torna cada imagem clicável + acessível por teclado */
     images.forEach((img) => {
       img.setAttribute('role', 'button');
       img.setAttribute('tabindex', '0');
@@ -209,52 +185,8 @@
         }
       });
     });
-  };
 
-  /* =========================================================
-     SCROLL FADE — respeita prefers-reduced-motion
-     ========================================================= */
-  const setupScrollFade = () => {
-    const sections = SECTION_IDS
-      .map((id) => document.getElementById(id))
-      .filter(Boolean);
-
-    if (!sections.length) return;
-
-    sections.forEach((s) => s.classList.add('aurora-fade'));
-
-    if (!('IntersectionObserver' in window) || reduceMotion) {
-      sections.forEach((s) => s.classList.add('aurora-visible'));
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('aurora-visible');
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.15 }
-    );
-
-    /* Espera 2 frames antes de observar para o browser pintar o estado inicial */
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        sections.forEach((s) => observer.observe(s));
-      });
-    });
-  };
-
-  /* =========================================================
-     Inicialização
-     ========================================================= */
-  const init = () => {
-    setupLightbox();
-    setupScrollFade();
-    console.log('[Café Aurora] Customizações ativas ☕ (reduceMotion:', reduceMotion + ')');
+    console.log('[Café Aurora] Customizações ativas ☕');
   };
 
   if (document.readyState === 'loading') {
