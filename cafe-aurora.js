@@ -1,7 +1,12 @@
 /* =========================================================
-   Café Aurora — Animações on-scroll customizadas
-   Hospedado externamente (jsDelivr / GitHub Pages)
+   Café Aurora — JavaScript customizado
+   Hospedado externamente (jsDelivr / GitHub)
    Carregado no Webflow via DOM tag <script src="...">
+
+   Funcionalidades:
+   1. Lightbox: clique em imagens do #sobre para ampliá-las
+   2. Hover sutil nas imagens (brightness + cursor)
+   3. Fade-in das sections ao rolar (respeita prefers-reduced-motion)
    ========================================================= */
 
 (() => {
@@ -10,10 +15,93 @@
   const SECTION_IDS = ['sobre', 'cardapio', 'espaco', 'avaliacoes', 'localizacao', 'reserva'];
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* Injeta CSS com !important para vencer a especificidade do Webflow */
+  /* =========================================================
+     CSS injetado (com !important para vencer o Webflow)
+     ========================================================= */
   const style = document.createElement('style');
-  style.id = 'aurora-animations-css';
+  style.id = 'aurora-customizations-css';
   style.textContent = `
+    /* Hover sutil nas imagens do #sobre */
+    #sobre .image_cover {
+      cursor: zoom-in !important;
+      filter: brightness(0.95);
+      transition: filter .3s ease, box-shadow .3s ease !important;
+    }
+    #sobre .image_cover:hover,
+    #sobre .image_cover:focus-visible {
+      filter: brightness(1.05) !important;
+      box-shadow: 0 12px 40px rgba(43, 26, 16, 0.35) !important;
+      outline: none;
+    }
+
+    /* Lightbox overlay */
+    .aurora-lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(20, 12, 8, 0.92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+      padding: 2rem;
+      opacity: 0;
+      transition: opacity .3s ease;
+      cursor: zoom-out;
+    }
+    .aurora-lightbox.aurora-lightbox-open {
+      opacity: 1;
+    }
+    .aurora-lightbox img {
+      max-width: 90vw;
+      max-height: 85vh;
+      border-radius: .75rem;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+      transform: scale(0.96);
+      transition: transform .35s cubic-bezier(.16, 1, .3, 1);
+    }
+    .aurora-lightbox.aurora-lightbox-open img {
+      transform: scale(1);
+    }
+    .aurora-lightbox-close {
+      position: absolute;
+      top: 1.5rem;
+      right: 1.5rem;
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .2s ease, transform .2s ease;
+    }
+    .aurora-lightbox-close:hover,
+    .aurora-lightbox-close:focus-visible {
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.1);
+    }
+    .aurora-lightbox-caption {
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255, 255, 255, 0.85);
+      font-size: .95rem;
+      max-width: 80%;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.4);
+      padding: .6rem 1.2rem;
+      border-radius: 999px;
+    }
+    body.aurora-lightbox-active {
+      overflow: hidden;
+    }
+
+    /* Fade-in on scroll (respeita reduce motion) */
     .aurora-fade {
       opacity: 0 !important;
       transform: translateY(40px) !important;
@@ -25,28 +113,8 @@
       opacity: 1 !important;
       transform: translateY(0) !important;
     }
-    .aurora-stagger > * {
-      opacity: 0 !important;
-      transform: translateY(20px) !important;
-      transition: opacity .6s ease-out, transform .6s ease-out !important;
-    }
-    .aurora-stagger.aurora-visible > * {
-      opacity: 1 !important;
-      transform: translateY(0) !important;
-    }
-    .aurora-stagger.aurora-visible > *:nth-child(1) { transition-delay: 0ms !important; }
-    .aurora-stagger.aurora-visible > *:nth-child(2) { transition-delay: 90ms !important; }
-    .aurora-stagger.aurora-visible > *:nth-child(3) { transition-delay: 180ms !important; }
-    .aurora-stagger.aurora-visible > *:nth-child(4) { transition-delay: 270ms !important; }
-    .aurora-stagger.aurora-visible > *:nth-child(5) { transition-delay: 360ms !important; }
-    .aurora-stagger.aurora-visible > *:nth-child(6) { transition-delay: 450ms !important; }
-    .aurora-stagger.aurora-visible > *:nth-child(n+7) { transition-delay: 540ms !important; }
-    .aurora-active-link {
-      font-weight: 600 !important;
-      opacity: 1 !important;
-    }
     @media (prefers-reduced-motion: reduce) {
-      .aurora-fade, .aurora-stagger > * {
+      .aurora-fade {
         opacity: 1 !important;
         transform: none !important;
         transition: none !important;
@@ -55,85 +123,140 @@
   `;
   document.head.appendChild(style);
 
-  const init = () => {
+  /* =========================================================
+     LIGHTBOX — funciona mesmo com prefers-reduced-motion
+     (acionado por clique do usuário = user-initiated)
+     ========================================================= */
+  const setupLightbox = () => {
+    const sobre = document.getElementById('sobre');
+    if (!sobre) {
+      console.warn('[Aurora] #sobre não encontrado, pulando lightbox.');
+      return;
+    }
+
+    const images = sobre.querySelectorAll('img.image_cover, img');
+    if (!images.length) {
+      console.warn('[Aurora] Nenhuma imagem encontrada no #sobre.');
+      return;
+    }
+
+    console.log('[Aurora] Lightbox configurado em', images.length, 'imagens do #sobre');
+
+    /* Torna cada imagem clicável + acessível por teclado */
+    images.forEach((img) => {
+      img.setAttribute('role', 'button');
+      img.setAttribute('tabindex', '0');
+      img.setAttribute('aria-label', `Ampliar imagem: ${img.alt || 'imagem'}`);
+
+      const openLightbox = () => {
+        const overlay = document.createElement('div');
+        overlay.className = 'aurora-lightbox';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-label', 'Imagem ampliada');
+
+        const bigImg = document.createElement('img');
+        bigImg.src = img.src;
+        bigImg.alt = img.alt;
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'aurora-lightbox-close';
+        closeBtn.setAttribute('aria-label', 'Fechar imagem ampliada');
+        closeBtn.innerHTML = '&times;';
+
+        const caption = document.createElement('div');
+        caption.className = 'aurora-lightbox-caption';
+        caption.textContent = img.alt || 'Café Aurora';
+
+        overlay.appendChild(bigImg);
+        overlay.appendChild(closeBtn);
+        overlay.appendChild(caption);
+        document.body.appendChild(overlay);
+        document.body.classList.add('aurora-lightbox-active');
+
+        /* Dispara animação de entrada no próximo frame */
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => overlay.classList.add('aurora-lightbox-open'));
+        });
+
+        const closeLightbox = () => {
+          overlay.classList.remove('aurora-lightbox-open');
+          setTimeout(() => {
+            overlay.remove();
+            document.body.classList.remove('aurora-lightbox-active');
+            img.focus();
+          }, 300);
+        };
+
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay || e.target === closeBtn) closeLightbox();
+        });
+        const escHandler = (e) => {
+          if (e.key === 'Escape') {
+            closeLightbox();
+            document.removeEventListener('keydown', escHandler);
+          }
+        };
+        document.addEventListener('keydown', escHandler);
+        closeBtn.focus();
+      };
+
+      img.addEventListener('click', openLightbox);
+      img.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openLightbox();
+        }
+      });
+    });
+  };
+
+  /* =========================================================
+     SCROLL FADE — respeita prefers-reduced-motion
+     ========================================================= */
+  const setupScrollFade = () => {
     const sections = SECTION_IDS
       .map((id) => document.getElementById(id))
       .filter(Boolean);
 
-    console.log('[Aurora] Sections encontradas:', sections.length, '/', SECTION_IDS.length);
-    sections.forEach(s => console.log('[Aurora]  →', s.tagName.toLowerCase(), '#' + s.id));
+    if (!sections.length) return;
 
-    if (!sections.length) {
-      console.warn('[Aurora] Nenhuma section encontrada com os IDs configurados.');
-      return;
-    }
-
-    sections.forEach((section) => {
-      section.classList.add('aurora-fade');
-      const candidate = section.querySelector(
-        '.w-layout-grid, .w-dyn-items, .w-row, ul:not(nav ul):not(footer ul)'
-      );
-      if (candidate && candidate.children.length >= 2) {
-        candidate.classList.add('aurora-stagger');
-        console.log('[Aurora] Stagger aplicado em', candidate.children.length, 'filhos de #' + section.id);
-      }
-    });
+    sections.forEach((s) => s.classList.add('aurora-fade'));
 
     if (!('IntersectionObserver' in window) || reduceMotion) {
-      console.log('[Aurora] Fallback: sem IntersectionObserver ou movimento reduzido. Mostrando tudo.');
-      sections.forEach((s) => {
-        s.classList.add('aurora-visible');
-        s.querySelectorAll('.aurora-stagger').forEach((el) => el.classList.add('aurora-visible'));
-      });
+      sections.forEach((s) => s.classList.add('aurora-visible'));
       return;
     }
 
-    const fadeObserver = new IntersectionObserver(
+    const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            console.log('[Aurora] Section visível:', '#' + entry.target.id);
             entry.target.classList.add('aurora-visible');
-            entry.target
-              .querySelectorAll('.aurora-stagger')
-              .forEach((el) => el.classList.add('aurora-visible'));
-            fadeObserver.unobserve(entry.target);
+            observer.unobserve(entry.target);
           }
         });
       },
       { threshold: 0.15 }
     );
 
-    sections.forEach((s) => fadeObserver.observe(s));
-
-    const navLinks = document.querySelectorAll(
-      'nav a[href^="#"], a.w-nav-link[href^="#"], .w-nav-menu a[href^="#"]'
-    );
-    if (navLinks.length) {
-      const activeObserver = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              const id = entry.target.id;
-              navLinks.forEach((link) => {
-                const isActive = link.getAttribute('href') === `#${id}`;
-                link.classList.toggle('aurora-active-link', isActive);
-                if (isActive) link.setAttribute('aria-current', 'true');
-                else link.removeAttribute('aria-current');
-              });
-            }
-          });
-        },
-        { rootMargin: '-40% 0px -55% 0px' }
-      );
-
-      sections.forEach((s) => activeObserver.observe(s));
-    }
-
-    console.log('[Café Aurora] Animações on-scroll ativas ☕');
+    /* Espera 2 frames antes de observar para o browser pintar o estado inicial */
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        sections.forEach((s) => observer.observe(s));
+      });
+    });
   };
 
-  /* Aguarda DOM completo se o script foi carregado antes */
+  /* =========================================================
+     Inicialização
+     ========================================================= */
+  const init = () => {
+    setupLightbox();
+    setupScrollFade();
+    console.log('[Café Aurora] Customizações ativas ☕ (reduceMotion:', reduceMotion + ')');
+  };
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
